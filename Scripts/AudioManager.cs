@@ -95,7 +95,9 @@ namespace UniT.Audio
 
         void IAudioManager.LoadSound(AudioClip clip) => this.soundPool.Load(clip);
 
+        #if !UNITY_WEBGL
         void IAudioManager.LoadSound(object key) => this.soundPool.Load(key);
+        #endif
 
         #if UNIT_UNITASK
         UniTask IAudioManager.LoadSoundAsync(object key, IProgress<float>? progress, CancellationToken cancellationToken) => this.soundPool.LoadAsync(key, progress, cancellationToken);
@@ -173,7 +175,9 @@ namespace UniT.Audio
 
         void IAudioManager.LoadMusic(AudioClip clip) => this.musicPool.Load(clip);
 
+        #if !UNITY_WEBGL
         void IAudioManager.LoadMusic(object key) => this.musicPool.Load(key);
+        #endif
 
         #if UNIT_UNITASK
         UniTask IAudioManager.LoadMusicAsync(object key, IProgress<float>? progress, CancellationToken cancellationToken) => this.musicPool.LoadAsync(key, progress, cancellationToken);
@@ -329,11 +333,13 @@ namespace UniT.Audio
                 }, (@this: this, clip));
             }
 
+            #if !UNITY_WEBGL
             public void Load(object key)
             {
                 var clip = this.keyToClip.GetOrAdd(key, state => state.assetsManager.Load<AudioClip>(state.key), (this.manager.assetsManager, key));
                 this.Load(clip);
             }
+            #endif
 
             #if UNIT_UNITASK
             public async UniTask LoadAsync(object key, IProgress<float>? progress, CancellationToken cancellationToken)
@@ -364,7 +370,14 @@ namespace UniT.Audio
 
             public void PlayOneShot(object key)
             {
-                var clip = this.keyToClip.GetOrAdd(key, state => state.assetsManager.Load<AudioClip>(state.key), (this.manager.assetsManager, key));
+                var clip = this.keyToClip.GetOrAdd(key, state =>
+                {
+                    #if !UNITY_WEBGL
+                    return state.assetsManager.Load<AudioClip>(state.key);
+                    #else
+                    throw new NotSupportedException("Cannot directly Play with key on WebGL. Please preload it with `LoadAsync`.");
+                    #endif
+                }, (this.manager.assetsManager, key));
                 this.PlayOneShot(clip);
             }
 
@@ -379,7 +392,14 @@ namespace UniT.Audio
 
             public void Play(object key, bool loop, bool force)
             {
-                var clip = this.keyToClip.GetOrAdd(key, state => state.assetsManager.Load<AudioClip>(state.key), (this.manager.assetsManager, key));
+                var clip = this.keyToClip.GetOrAdd(key, state =>
+                {
+                    #if !UNITY_WEBGL
+                    return state.assetsManager.Load<AudioClip>(state.key);
+                    #else
+                    throw new NotSupportedException("Cannot directly Play with key on WebGL. Please preload it with `LoadAsync`.");
+                    #endif
+                }, (this.manager.assetsManager, key));
                 this.Play(clip, loop, force);
             }
 

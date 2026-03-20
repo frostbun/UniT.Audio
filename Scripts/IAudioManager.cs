@@ -16,7 +16,9 @@ namespace UniT.Audio
 
         public void LoadSound(AudioClip clip);
 
+        #if !UNITY_WEBGL
         public void LoadSound(object key);
+        #endif
 
         public void PlaySoundOneShot(AudioClip clip);
 
@@ -60,7 +62,9 @@ namespace UniT.Audio
 
         public void LoadMusic(AudioClip clip);
 
+        #if !UNITY_WEBGL
         public void LoadMusic(object key);
+        #endif
 
         public void PlayMusic(AudioClip clip, bool loop = true, bool force = false);
 
