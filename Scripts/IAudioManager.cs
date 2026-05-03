@@ -14,6 +14,18 @@ namespace UniT.Audio
     {
         #region Sound
 
+        public event Action EffectiveSoundVolumeChanged;
+
+        public event Action EffectiveMuteSoundChanged;
+
+        public float EffectiveSoundVolume { get; }
+
+        public bool EffectiveMuteSound { get; }
+
+        public void RegisterSoundSource(AudioSource source);
+
+        public void UnregisterSoundSource(AudioSource source);
+
         public void LoadSound(AudioClip clip);
 
         #if !UNITY_WEBGL
@@ -27,6 +39,18 @@ namespace UniT.Audio
         public void PlaySound(AudioClip clip, bool loop = false, bool force = false);
 
         public void PlaySound(object key, bool loop = false, bool force = false);
+
+        public bool IsSoundPlaying(AudioClip clip);
+
+        public bool IsSoundPlaying(object key);
+
+        public float GetSoundTime(AudioClip clip);
+
+        public float GetSoundTime(object key);
+
+        public void SetSoundTime(AudioClip clip, float time);
+
+        public void SetSoundTime(object key, float time);
 
         public void PauseSound(AudioClip clip);
 
@@ -56,9 +80,13 @@ namespace UniT.Audio
 
         #region Music
 
-        public object? CurrentMusic { get; }
+        public event Action EffectiveMusicVolumeChanged;
 
-        public float MusicTime { get; set; }
+        public event Action EffectiveMuteMusicChanged;
+
+        public float EffectiveMusicVolume { get; }
+
+        public bool EffectiveMuteMusic { get; }
 
         public void LoadMusic(AudioClip clip);
 
@@ -69,6 +97,12 @@ namespace UniT.Audio
         public void PlayMusic(AudioClip clip, bool loop = true, bool force = false);
 
         public void PlayMusic(object key, bool loop = true, bool force = false);
+
+        public bool IsMusicPlaying();
+
+        public float GetMusicTime();
+
+        public void SetMusicTime(float time);
 
         public void PauseMusic();
 

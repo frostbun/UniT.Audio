@@ -21,37 +21,26 @@ namespace UniT.Audio
     {
         #region Constructor
 
-        private readonly IAssetsManager assetsManager;
-        private readonly ILogger        logger;
-
-        private readonly AudioSettings      settings         = new AudioSettings();
-        private readonly GameObject         sourcesContainer = new GameObject(nameof(AudioManager)).DontDestroyOnLoad();
-        private readonly Queue<AudioSource> sourcePool       = new Queue<AudioSource>();
-
-        private readonly AudioPool soundPool;
-        private readonly AudioPool musicPool;
+        private readonly AudioSettings masterSettings = new();
+        private readonly AudioPool     soundPool;
+        private readonly AudioPool     musicPool;
 
         [Preserve]
         public AudioManager(IAssetsManager assetsManager, ILoggerManager loggerManager)
         {
-            this.assetsManager = assetsManager;
-            this.logger        = loggerManager.GetLogger(this);
-            this.soundPool     = new AudioPool(this);
-            this.musicPool     = new AudioPool(this);
-            this.logger.Debug("Constructed");
+            var sourceContainer = new GameObject(nameof(AudioManager)).DontDestroyOnLoad();
+            var sourcePool      = new Queue<AudioSource>();
+            var logger          = loggerManager.GetLogger(this);
+
+            this.soundPool = new(this.masterSettings, assetsManager, sourceContainer, sourcePool, logger);
+            this.musicPool = new(this.masterSettings, assetsManager, sourceContainer, sourcePool, logger);
+
+            logger.Debug("Constructed");
         }
 
         #endregion
 
         #region Settings
-
-        event Action IAudioManagerSettings.SoundVolumeOutputChanged { add => this.soundPool.VolumeOutputChanged += value; remove => this.soundPool.VolumeOutputChanged -= value; }
-
-        event Action IAudioManagerSettings.MuteSoundOutputChanged { add => this.soundPool.MuteOutputChanged += value; remove => this.soundPool.MuteOutputChanged -= value; }
-
-        event Action IAudioManagerSettings.MusicVolumeOutputChanged { add => this.musicPool.VolumeOutputChanged += value; remove => this.musicPool.VolumeOutputChanged -= value; }
-
-        event Action IAudioManagerSettings.MuteMusicOutputChanged { add => this.musicPool.MuteOutputChanged += value; remove => this.musicPool.MuteOutputChanged -= value; }
 
         event Action IAudioManagerSettings.SoundVolumeChanged { add => this.soundPool.Settings.VolumeChanged += value; remove => this.soundPool.Settings.VolumeChanged -= value; }
 
@@ -61,17 +50,9 @@ namespace UniT.Audio
 
         event Action IAudioManagerSettings.MuteMusicChanged { add => this.musicPool.Settings.MuteChanged += value; remove => this.musicPool.Settings.MuteChanged -= value; }
 
-        event Action IAudioManagerSettings.MasterVolumeChanged { add => this.settings.VolumeChanged += value; remove => this.settings.VolumeChanged -= value; }
+        event Action IAudioManagerSettings.MasterVolumeChanged { add => this.masterSettings.VolumeChanged += value; remove => this.masterSettings.VolumeChanged -= value; }
 
-        event Action IAudioManagerSettings.MuteMasterChanged { add => this.settings.MuteChanged += value; remove => this.settings.MuteChanged -= value; }
-
-        float IAudioManagerSettings.SoundVolumeOutput => this.soundPool.VolumeOutput;
-
-        bool IAudioManagerSettings.MuteSoundOutput => this.soundPool.MuteOutput;
-
-        float IAudioManagerSettings.MusicVolumeOutput => this.musicPool.VolumeOutput;
-
-        bool IAudioManagerSettings.MuteMusicOutput => this.musicPool.MuteOutput;
+        event Action IAudioManagerSettings.MuteMasterChanged { add => this.masterSettings.MuteChanged += value; remove => this.masterSettings.MuteChanged -= value; }
 
         float IAudioManagerSettings.SoundVolume { get => this.soundPool.Settings.Volume; set => this.soundPool.Settings.Volume = value; }
 
@@ -81,17 +62,25 @@ namespace UniT.Audio
 
         bool IAudioManagerSettings.MuteMusic { get => this.musicPool.Settings.Mute; set => this.musicPool.Settings.Mute = value; }
 
-        float IAudioManagerSettings.MasterVolume { get => this.settings.Volume; set => this.settings.Volume = value; }
+        float IAudioManagerSettings.MasterVolume { get => this.masterSettings.Volume; set => this.masterSettings.Volume = value; }
 
-        bool IAudioManagerSettings.MuteMaster { get => this.settings.Mute; set => this.settings.Mute = value; }
-
-        void IAudioManagerSettings.RegisterSound(AudioSource source) => this.soundPool.Register(source);
-
-        void IAudioManagerSettings.UnregisterSound(AudioSource soundSource) => this.soundPool.Unregister(soundSource);
+        bool IAudioManagerSettings.MuteMaster { get => this.masterSettings.Mute; set => this.masterSettings.Mute = value; }
 
         #endregion
 
         #region Sound
+
+        event Action IAudioManager.EffectiveSoundVolumeChanged { add => this.soundPool.EffectiveVolumeChanged += value; remove => this.soundPool.EffectiveVolumeChanged -= value; }
+
+        event Action IAudioManager.EffectiveMuteSoundChanged { add => this.soundPool.EffectiveMuteChanged += value; remove => this.soundPool.EffectiveMuteChanged -= value; }
+
+        float IAudioManager.EffectiveSoundVolume => this.soundPool.EffectiveVolume;
+
+        bool IAudioManager.EffectiveMuteSound => this.soundPool.EffectiveMute;
+
+        void IAudioManager.RegisterSoundSource(AudioSource source) => this.soundPool.Register(source);
+
+        void IAudioManager.UnregisterSoundSource(AudioSource soundSource) => this.soundPool.Unregister(soundSource);
 
         void IAudioManager.LoadSound(AudioClip clip) => this.soundPool.Load(clip);
 
@@ -112,6 +101,18 @@ namespace UniT.Audio
         void IAudioManager.PlaySound(AudioClip clip, bool loop, bool force) => this.soundPool.Play(clip, loop, force);
 
         void IAudioManager.PlaySound(object key, bool loop, bool force) => this.soundPool.Play(key, loop, force);
+
+        bool IAudioManager.IsSoundPlaying(AudioClip clip) => this.soundPool.IsPlaying(clip);
+
+        bool IAudioManager.IsSoundPlaying(object key) => this.soundPool.IsPlaying(key);
+
+        float IAudioManager.GetSoundTime(AudioClip clip) => this.soundPool.GetTime(clip);
+
+        float IAudioManager.GetSoundTime(object key) => this.soundPool.GetTime(key);
+
+        void IAudioManager.SetSoundTime(AudioClip clip, float time) => this.soundPool.SetTime(clip, time);
+
+        void IAudioManager.SetSoundTime(object key, float time) => this.soundPool.SetTime(key, time);
 
         void IAudioManager.PauseSound(AudioClip clip) => this.soundPool.Pause(clip);
 
@@ -141,37 +142,15 @@ namespace UniT.Audio
 
         #region Music
 
-        private AudioClip? currentMusicClip;
-        private object?    currentMusicKey;
+        private object? playingMusic;
 
-        object? IAudioManager.CurrentMusic => this.currentMusicClip ?? this.currentMusicKey;
+        event Action IAudioManager.EffectiveMusicVolumeChanged { add => this.musicPool.EffectiveVolumeChanged += value; remove => this.musicPool.EffectiveVolumeChanged -= value; }
 
-        float IAudioManager.MusicTime
-        {
-            get
-            {
-                if (this.currentMusicClip is { })
-                {
-                    return this.musicPool.GetTime(this.currentMusicClip);
-                }
-                if (this.currentMusicKey is { })
-                {
-                    return this.musicPool.GetTime(this.currentMusicKey);
-                }
-                return 0;
-            }
-            set
-            {
-                if (this.currentMusicClip is { })
-                {
-                    this.musicPool.SetTime(this.currentMusicClip, value);
-                }
-                if (this.currentMusicKey is { })
-                {
-                    this.musicPool.SetTime(this.currentMusicKey, value);
-                }
-            }
-        }
+        event Action IAudioManager.EffectiveMuteMusicChanged { add => this.musicPool.EffectiveMuteChanged += value; remove => this.musicPool.EffectiveMuteChanged -= value; }
+
+        float IAudioManager.EffectiveMusicVolume => this.musicPool.EffectiveVolume;
+
+        bool IAudioManager.EffectiveMuteMusic => this.musicPool.EffectiveMute;
 
         void IAudioManager.LoadMusic(AudioClip clip) => this.musicPool.Load(clip);
 
@@ -187,129 +166,147 @@ namespace UniT.Audio
 
         void IAudioManager.PlayMusic(AudioClip clip, bool loop, bool force)
         {
-            if (this.currentMusicClip is { } && this.currentMusicClip != clip)
+            if (this.playingMusic is { } && !ReferenceEquals(this.playingMusic, clip))
             {
-                this.musicPool.Stop(this.currentMusicClip);
-                this.currentMusicClip = null;
-            }
-            if (this.currentMusicKey is { })
-            {
-                this.musicPool.Stop(this.currentMusicKey);
-                this.currentMusicKey = null;
+                this.musicPool.Stop(clip);
+                this.playingMusic = null;
             }
             this.musicPool.Play(clip, loop, force);
-            this.currentMusicClip = clip;
+            this.playingMusic = clip;
         }
 
         void IAudioManager.PlayMusic(object key, bool loop, bool force)
         {
-            if (this.currentMusicClip is { })
+            if (this.playingMusic is { } && this.playingMusic != key)
             {
-                this.musicPool.Stop(this.currentMusicClip);
-                this.currentMusicClip = null;
-            }
-            if (this.currentMusicKey is { } && this.currentMusicKey != key)
-            {
-                this.musicPool.Stop(this.currentMusicKey);
-                this.currentMusicKey = null;
+                this.musicPool.Stop(key);
+                this.playingMusic = null;
             }
             this.musicPool.Play(key, loop, force);
-            this.currentMusicKey = key;
+            this.playingMusic = key;
+        }
+
+        bool IAudioManager.IsMusicPlaying()
+        {
+            switch (this.playingMusic)
+            {
+                case AudioClip clip: return this.musicPool.IsPlaying(clip);
+                case { } key:        return this.musicPool.IsPlaying(key);
+                default:             return false;
+            }
+        }
+
+        float IAudioManager.GetMusicTime()
+        {
+            switch (this.playingMusic)
+            {
+                case AudioClip clip: return this.musicPool.GetTime(clip);
+                case { } key:        return this.musicPool.GetTime(key);
+                default:             return 0;
+            }
+        }
+
+        void IAudioManager.SetMusicTime(float time)
+        {
+            switch (this.playingMusic)
+            {
+                case AudioClip clip: this.musicPool.SetTime(clip, time); break;
+                case { } key:        this.musicPool.SetTime(key, time); break;
+            }
         }
 
         void IAudioManager.PauseMusic()
         {
-            if (this.currentMusicClip is { } clip)
+            switch (this.playingMusic)
             {
-                this.musicPool.Pause(clip);
-            }
-            if (this.currentMusicKey is { } name)
-            {
-                this.musicPool.Pause(name);
+                case AudioClip clip: this.musicPool.Pause(clip); break;
+                case { } key:        this.musicPool.Pause(key); break;
             }
         }
 
         void IAudioManager.ResumeMusic()
         {
-            if (this.currentMusicClip is { } clip)
+            switch (this.playingMusic)
             {
-                this.musicPool.Resume(clip);
-            }
-            if (this.currentMusicKey is { } name)
-            {
-                this.musicPool.Resume(name);
+                case AudioClip clip: this.musicPool.Resume(clip); break;
+                case { } key:        this.musicPool.Resume(key); break;
             }
         }
 
         void IAudioManager.StopMusic()
         {
-            if (this.currentMusicClip is { } clip)
+            switch (this.playingMusic)
             {
-                this.musicPool.Stop(clip);
+                case AudioClip clip: this.musicPool.Stop(clip); break;
+                case { } key:        this.musicPool.Stop(key); break;
             }
-            if (this.currentMusicKey is { } name)
-            {
-                this.musicPool.Stop(name);
-            }
+            this.playingMusic = null;
         }
 
         void IAudioManager.UnloadMusic(AudioClip clip)
         {
             this.musicPool.Unload(clip);
-            if (this.currentMusicClip == clip)
+            if (ReferenceEquals(this.playingMusic, clip))
             {
-                this.currentMusicClip = null;
+                this.playingMusic = null;
             }
         }
 
         void IAudioManager.UnloadMusic(object key)
         {
             this.musicPool.Unload(key);
-            if (this.currentMusicKey == key)
+            if (this.playingMusic == key)
             {
-                this.currentMusicKey = null;
+                this.playingMusic = null;
             }
         }
 
         void IAudioManager.UnloadAllMusics()
         {
             this.musicPool.UnloadAll();
-            this.currentMusicClip = null;
-            this.currentMusicKey  = null;
+            this.playingMusic = null;
         }
 
         #endregion
 
         private sealed class AudioPool
         {
-            private readonly AudioManager manager;
+            private readonly AudioSettings      masterSettings;
+            private readonly IAssetsManager     assetsManager;
+            private readonly GameObject         sourcesContainer;
+            private readonly Queue<AudioSource> sourcePool;
+            private readonly ILogger            logger;
 
-            private readonly HashSet<AudioSource>               registeredSources = new HashSet<AudioSource>();
-            private readonly Dictionary<object, AudioClip>      keyToClip         = new Dictionary<object, AudioClip>();
-            private readonly Dictionary<AudioClip, AudioSource> clipToSource      = new Dictionary<AudioClip, AudioSource>();
+            private readonly HashSet<AudioSource>               registeredSources = new();
+            private readonly Dictionary<object, AudioClip>      keyToClip         = new();
+            private readonly Dictionary<AudioClip, AudioSource> clipToSource      = new();
 
-            public AudioPool(AudioManager manager)
+            public AudioPool(AudioSettings masterSettings, IAssetsManager assetsManager, GameObject sourcesContainer, Queue<AudioSource> sourcePool, ILogger logger)
             {
-                this.manager = manager;
+                this.masterSettings   = masterSettings;
+                this.assetsManager    = assetsManager;
+                this.sourcesContainer = sourcesContainer;
+                this.sourcePool       = sourcePool;
+                this.logger           = logger;
 
-                manager.settings.VolumeChanged += this.OnVolumeOutputChanged;
-                manager.settings.MuteChanged   += this.OnMuteOutputChanged;
+                masterSettings.VolumeChanged += this.OnEffectiveVolumeChanged;
+                masterSettings.MuteChanged   += this.OnEffectiveMuteChanged;
 
-                this.Settings.VolumeChanged += this.OnVolumeOutputChanged;
-                this.Settings.MuteChanged   += this.OnMuteOutputChanged;
+                this.Settings.VolumeChanged += this.OnEffectiveVolumeChanged;
+                this.Settings.MuteChanged   += this.OnEffectiveMuteChanged;
             }
 
-            public AudioSettings Settings { get; } = new AudioSettings();
+            public AudioSettings Settings { get; } = new();
 
             #region Public
 
-            public event Action? VolumeOutputChanged;
+            public event Action? EffectiveVolumeChanged;
 
-            public event Action? MuteOutputChanged;
+            public event Action? EffectiveMuteChanged;
 
-            public float VolumeOutput => this.Settings.Volume * this.manager.settings.Volume;
+            public float EffectiveVolume => this.Settings.Volume * this.masterSettings.Volume;
 
-            public bool MuteOutput => this.Settings.Mute || this.manager.settings.Mute;
+            public bool EffectiveMute => this.Settings.Mute || this.masterSettings.Mute;
 
             public void Register(AudioSource source)
             {
@@ -322,13 +319,14 @@ namespace UniT.Audio
                 this.registeredSources.Remove(source);
             }
 
-            public void Load(AudioClip clip)
+            public AudioSource Load(AudioClip clip)
             {
-                this.clipToSource.TryAdd(clip, state =>
+                return this.clipToSource.GetOrAdd(clip, static state =>
                 {
-                    var source = state.@this.manager.sourcePool.DequeueOrDefault(() => state.@this.manager.sourcesContainer.AddComponent<AudioSource>());
+                    var source = state.@this.sourcePool.DequeueOrDefault(static sourcesContainer => sourcesContainer.AddComponent<AudioSource>(), state.@this.sourcesContainer);
                     state.@this.Configure(source);
                     source.clip = state.clip;
+                    state.@this.logger.Debug($"Loaded {state.clip.name}");
                     return source;
                 }, (@this: this, clip));
             }
@@ -336,7 +334,7 @@ namespace UniT.Audio
             #if !UNITY_WEBGL
             public void Load(object key)
             {
-                var clip = this.keyToClip.GetOrAdd(key, state => state.assetsManager.Load<AudioClip>(state.key), (this.manager.assetsManager, key));
+                var clip = this.keyToClip.GetOrAdd(key, static state => state.assetsManager.Load<AudioClip>(state.key), (this.assetsManager, key));
                 this.Load(clip);
             }
             #endif
@@ -344,7 +342,7 @@ namespace UniT.Audio
             #if UNIT_UNITASK
             public async UniTask LoadAsync(object key, IProgress<float>? progress, CancellationToken cancellationToken)
             {
-                var clip = await this.keyToClip.GetOrAddAsync(key, state => state.assetsManager.LoadAsync<AudioClip>(state.key, state.progress, state.cancellationToken), (this.manager.assetsManager, key, progress, cancellationToken));
+                var clip = await this.keyToClip.GetOrAddAsync(key, static state => state.assetsManager.LoadAsync<AudioClip>(state.key, state.progress, state.cancellationToken), (this.assetsManager, key, progress, cancellationToken));
                 this.Load(clip);
             }
             #else
@@ -353,7 +351,7 @@ namespace UniT.Audio
                 var clip = default(AudioClip)!;
                 yield return this.keyToClip.GetOrAddAsync(
                     key,
-                    callback => this.manager.assetsManager.LoadAsync(key, callback, progress),
+                    callback => this.assetsManager.LoadAsync(key, callback, progress),
                     result => clip = result
                 );
                 this.Load(clip);
@@ -365,19 +363,12 @@ namespace UniT.Audio
             {
                 var source = this.GetOrLoadSource(clip);
                 source.PlayOneShot(source.clip);
-                this.manager.logger.Debug($"Playing one shot {clip.name}");
+                this.logger.Debug($"Playing one shot {clip.name}");
             }
 
             public void PlayOneShot(object key)
             {
-                var clip = this.keyToClip.GetOrAdd(key, state =>
-                {
-                    #if !UNITY_WEBGL
-                    return state.assetsManager.Load<AudioClip>(state.key);
-                    #else
-                    throw new NotSupportedException("Cannot directly Play with key on WebGL. Please preload it with `LoadAsync`.");
-                    #endif
-                }, (this.manager.assetsManager, key));
+                var clip = this.GetOrLoadClip(key);
                 this.PlayOneShot(clip);
             }
 
@@ -387,20 +378,25 @@ namespace UniT.Audio
                 source.loop = loop;
                 if (!force && source.isPlaying) return;
                 source.Play();
-                this.manager.logger.Debug($"Playing {clip.name}, loop: {loop}");
+                this.logger.Debug($"Playing {clip.name}, loop: {loop}");
             }
 
             public void Play(object key, bool loop, bool force)
             {
-                var clip = this.keyToClip.GetOrAdd(key, state =>
-                {
-                    #if !UNITY_WEBGL
-                    return state.assetsManager.Load<AudioClip>(state.key);
-                    #else
-                    throw new NotSupportedException("Cannot directly Play with key on WebGL. Please preload it with `LoadAsync`.");
-                    #endif
-                }, (this.manager.assetsManager, key));
+                var clip = this.GetOrLoadClip(key);
                 this.Play(clip, loop, force);
+            }
+
+            public bool IsPlaying(AudioClip clip)
+            {
+                if (!this.TryGetSource(clip, out var source)) return false;
+                return source.isPlaying;
+            }
+
+            public bool IsPlaying(object key)
+            {
+                if (!this.TryGetClip(key, out var clip)) return false;
+                return this.IsPlaying(clip);
             }
 
             public float GetTime(AudioClip clip)
@@ -419,7 +415,7 @@ namespace UniT.Audio
             {
                 if (!this.TryGetSource(clip, out var source)) return;
                 source.time = time;
-                this.manager.logger.Debug($"Set {clip.name} time to {time}");
+                this.logger.Debug($"Set {clip.name} time to {time}");
             }
 
             public void SetTime(object key, float time)
@@ -432,7 +428,7 @@ namespace UniT.Audio
             {
                 if (!this.TryGetSource(clip, out var source)) return;
                 source.Pause();
-                this.manager.logger.Debug($"Paused {clip.name}");
+                this.logger.Debug($"Paused {clip.name}");
             }
 
             public void Pause(object key)
@@ -450,7 +446,7 @@ namespace UniT.Audio
             {
                 if (!this.TryGetSource(clip, out var source)) return;
                 source.UnPause();
-                this.manager.logger.Debug($"Resumed {clip.name}");
+                this.logger.Debug($"Resumed {clip.name}");
             }
 
             public void Resume(object key)
@@ -468,7 +464,7 @@ namespace UniT.Audio
             {
                 if (!this.TryGetSource(clip, out var source)) return;
                 source.Stop();
-                this.manager.logger.Debug($"Stopped {clip.name}");
+                this.logger.Debug($"Stopped {clip.name}");
             }
 
             public void Stop(object key)
@@ -487,16 +483,16 @@ namespace UniT.Audio
                 if (!this.TryGetSource(clip, out var source)) return;
                 source.Stop();
                 source.clip = null;
-                this.manager.sourcePool.Enqueue(source);
                 this.clipToSource.Remove(clip);
-                this.manager.logger.Debug($"Unloaded {clip.name}");
+                this.sourcePool.Enqueue(source);
+                this.logger.Debug($"Unloaded {clip.name}");
             }
 
             public void Unload(object key)
             {
                 if (!this.TryGetClip(key, out var clip)) return;
                 this.Unload(clip);
-                this.manager.assetsManager.Unload(key);
+                this.assetsManager.Unload(key);
                 this.keyToClip.Remove(key);
             }
 
@@ -510,18 +506,18 @@ namespace UniT.Audio
 
             #region Private
 
-            private void OnVolumeOutputChanged()
+            private void OnEffectiveVolumeChanged()
             {
                 this.clipToSource.ForEach(this.ConfigureVolume);
                 this.registeredSources.ForEach(this.ConfigureVolume);
-                this.VolumeOutputChanged?.Invoke();
+                this.EffectiveVolumeChanged?.Invoke();
             }
 
-            private void OnMuteOutputChanged()
+            private void OnEffectiveMuteChanged()
             {
                 this.clipToSource.ForEach(this.ConfigureMute);
                 this.registeredSources.ForEach(this.ConfigureMute);
-                this.MuteOutputChanged?.Invoke();
+                this.EffectiveMuteChanged?.Invoke();
             }
 
             private void Configure(AudioSource source)
@@ -532,35 +528,45 @@ namespace UniT.Audio
 
             private void ConfigureVolume(AudioSource source)
             {
-                source.volume = this.VolumeOutput;
+                source.volume = this.EffectiveVolume;
             }
 
             private void ConfigureMute(AudioSource source)
             {
-                source.mute = this.MuteOutput;
+                source.mute = this.EffectiveMute;
             }
 
             private AudioSource GetOrLoadSource(AudioClip clip)
             {
-                if (!this.clipToSource.ContainsKey(clip))
+                if (this.clipToSource.TryGetValue(clip, out var source)) return source;
+                source = this.Load(clip);
+                this.logger.Warning($"Auto loaded {clip.name}. Consider preload it with `Load` or `LoadAsync` for better performance.");
+                return source;
+            }
+
+            private AudioClip GetOrLoadClip(object key)
+            {
+                return this.keyToClip.GetOrAdd(key, static state =>
                 {
-                    this.Load(clip);
-                    this.manager.logger.Warning($"Auto loaded {clip.name}. Consider preload it with `Load` or `LoadAsync` for better performance.");
-                }
-                return this.clipToSource[clip];
+                    #if !UNITY_WEBGL
+                    return state.assetsManager.Load<AudioClip>(state.key);
+                    #else
+                    throw new NotSupportedException("Cannot directly Play with key on WebGL. Please preload it with `LoadAsync`.");
+                    #endif
+                }, (this.assetsManager, key));
             }
 
             private bool TryGetSource(AudioClip clip, [MaybeNullWhen(false)] out AudioSource source)
             {
                 if (this.clipToSource.TryGetValue(clip, out source)) return true;
-                this.manager.logger.Warning($"{clip.name} not loaded");
+                this.logger.Warning($"{clip.name} not loaded");
                 return false;
             }
 
             private bool TryGetClip(object key, [MaybeNullWhen(false)] out AudioClip clip)
             {
                 if (this.keyToClip.TryGetValue(key, out clip)) return true;
-                this.manager.logger.Warning($"{key} not loaded");
+                this.logger.Warning($"{key} not loaded");
                 return false;
             }
 
