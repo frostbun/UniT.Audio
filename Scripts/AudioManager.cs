@@ -27,7 +27,7 @@ namespace UniT.Audio
         public AudioManager(IAssetsManager assetsManager, ILoggerManager loggerManager)
         {
             var sourceContainer = new GameObject(nameof(AudioManager)).DontDestroyOnLoad();
-            var sourcePool      = new Queue<AudioSource>();
+            var sourcePool      = new Stack<AudioSource>();
             var logger          = loggerManager.GetLogger(this);
 
             this.soundPool = new(this.masterSettings, assetsManager, sourceContainer, sourcePool, logger);

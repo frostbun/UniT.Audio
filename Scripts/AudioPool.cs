@@ -21,14 +21,14 @@ namespace UniT.Audio
         private readonly AudioSettings      masterSettings;
         private readonly IAssetsManager     assetsManager;
         private readonly GameObject         sourcesContainer;
-        private readonly Queue<AudioSource> sourcePool;
+        private readonly Stack<AudioSource> sourcePool;
         private readonly ILogger            logger;
 
         private readonly HashSet<AudioSource>               registeredSources = new();
         private readonly Dictionary<object, AudioClip>      keyToClip         = new();
         private readonly Dictionary<AudioClip, AudioSource> clipToSource      = new();
 
-        public AudioPool(AudioSettings masterSettings, IAssetsManager assetsManager, GameObject sourcesContainer, Queue<AudioSource> sourcePool, ILogger logger)
+        public AudioPool(AudioSettings masterSettings, IAssetsManager assetsManager, GameObject sourcesContainer, Stack<AudioSource> sourcePool, ILogger logger)
         {
             this.masterSettings   = masterSettings;
             this.assetsManager    = assetsManager;
@@ -70,7 +70,7 @@ namespace UniT.Audio
         {
             return this.clipToSource.GetOrAdd(clip, static state =>
             {
-                var source = state.@this.sourcePool.DequeueOrDefault(static sourcesContainer => sourcesContainer.AddComponent<AudioSource>(), state.@this.sourcesContainer);
+                var source = state.@this.sourcePool.PopOrDefault(static sourcesContainer => sourcesContainer.AddComponent<AudioSource>(), state.@this.sourcesContainer);
                 state.@this.Configure(source);
                 source.clip = state.clip;
                 state.@this.logger.Debug($"Loaded {state.clip.name}");
@@ -231,7 +231,7 @@ namespace UniT.Audio
             source.Stop();
             source.clip = null;
             this.clipToSource.Remove(clip);
-            this.sourcePool.Enqueue(source);
+            this.sourcePool.Push(source);
             this.logger.Debug($"Unloaded {clip.name}");
         }
 
