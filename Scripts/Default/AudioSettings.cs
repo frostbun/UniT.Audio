@@ -1,9 +1,9 @@
 #nullable enable
-namespace UniT.Audio
+namespace UniT.Audio.Default
 {
     using System;
 
-    public sealed class AudioSettings
+    public sealed class AudioSettings : IAudioSettings
     {
         public event Action? VolumeChanged;
 

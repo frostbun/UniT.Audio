@@ -1,0 +1,17 @@
+{
+  "name": "UniT.Audio.Default.InternalDI",
+  "references": [
+    "UniT.Audio.Default",
+    "UniT.DI.InternalDI"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.frostbun.unit.di",
+      "expression": "",
+      "define": "UNIT_INTERNALDI"
+    }
+  ],
+  "defineConstraints": [
+    "UNIT_INTERNALDI"
+  ]
+}

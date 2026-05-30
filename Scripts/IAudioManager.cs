@@ -8,6 +8,8 @@ namespace UniT.Audio
 
     public interface IAudioManager : IDisposable
     {
+        public IAudioSettings MasterSettings { get; }
+
         #region Sound
 
         public event Action EffectiveSoundVolumeChanged;
@@ -17,6 +19,8 @@ namespace UniT.Audio
         public float EffectiveSoundVolume { get; }
 
         public bool EffectiveMuteSound { get; }
+
+        public IAudioSettings SoundSettings { get; }
 
         public void RegisterSoundSource(AudioSource source);
 
@@ -81,6 +85,8 @@ namespace UniT.Audio
         public float EffectiveMusicVolume { get; }
 
         public bool EffectiveMuteMusic { get; }
+
+        public IAudioSettings MusicSettings { get; }
 
         public void LoadMusic(AudioClip clip);
 

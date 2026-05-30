@@ -1,5 +1,5 @@
 #nullable enable
-namespace UniT.Audio
+namespace UniT.Audio.Default
 {
     using System;
     using System.Collections.Generic;
@@ -15,7 +15,7 @@ namespace UniT.Audio
     public sealed class AudioPool : IDisposable
     {
         private readonly AudioSettings      masterSettings;
-        private readonly IAssetsManager     assetsManager;
+        private readonly IAssetManager      assetManager;
         private readonly GameObject         sourcesContainer;
         private readonly Stack<AudioSource> sourcePool;
         private readonly ILogger            logger;
@@ -24,10 +24,10 @@ namespace UniT.Audio
         private readonly Dictionary<object, AudioClip>      keyToClip         = new();
         private readonly Dictionary<AudioClip, AudioSource> clipToSource      = new();
 
-        public AudioPool(AudioSettings masterSettings, IAssetsManager assetsManager, GameObject sourcesContainer, Stack<AudioSource> sourcePool, ILogger logger)
+        public AudioPool(AudioSettings masterSettings, IAssetManager assetManager, GameObject sourcesContainer, Stack<AudioSource> sourcePool, ILogger logger)
         {
             this.masterSettings   = masterSettings;
-            this.assetsManager    = assetsManager;
+            this.assetManager     = assetManager;
             this.sourcesContainer = sourcesContainer;
             this.sourcePool       = sourcePool;
             this.logger           = logger;
@@ -76,7 +76,7 @@ namespace UniT.Audio
 
         public async UniTask LoadAsync(object key, IProgress<float>? progress, CancellationToken cancellationToken)
         {
-            var clip = await this.keyToClip.GetOrAddAsync(key, static state => state.assetsManager.LoadAsync<AudioClip>(state.key, state.progress, state.cancellationToken), (this.assetsManager, key, progress, cancellationToken));
+            var clip = await this.keyToClip.GetOrAddAsync(key, static state => state.assetsManager.LoadAsync<AudioClip>(state.key, state.progress, state.cancellationToken), (assetsManager: this.assetManager, key, progress, cancellationToken));
             this.Load(clip);
         }
 
@@ -216,7 +216,7 @@ namespace UniT.Audio
         {
             if (!this.TryGetClip(key, out var clip)) return;
             this.Unload(clip);
-            this.assetsManager.Unload(key);
+            this.assetManager.Unload(key);
             this.keyToClip.Remove(key);
         }
 

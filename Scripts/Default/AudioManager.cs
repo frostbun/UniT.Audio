@@ -1,5 +1,5 @@
 #nullable enable
-namespace UniT.Audio
+namespace UniT.Audio.Default
 {
     using System;
     using System.Collections.Generic;
@@ -13,7 +13,7 @@ namespace UniT.Audio
     using ILogger = UniT.Logging.ILogger;
     using Object = UnityEngine.Object;
 
-    public sealed class AudioManager : IAudioManager, IAudioManagerSettings
+    public sealed class AudioManager : IAudioManager
     {
         #region Constructor
 
@@ -26,25 +26,19 @@ namespace UniT.Audio
         private readonly AudioPool          musicPool;
 
         [Preserve]
-        public AudioManager(IAssetsManager assetsManager, ILoggerManager loggerManager)
+        public AudioManager(IAssetManager assetManager, ILoggerManager loggerManager)
         {
             this.logger = loggerManager.GetLogger(this);
 
-            this.soundPool = new(this.masterSettings, assetsManager, this.sourceContainer, this.sourcePool, this.logger);
-            this.musicPool = new(this.masterSettings, assetsManager, this.sourceContainer, this.sourcePool, this.logger);
+            this.soundPool = new(this.masterSettings, assetManager, this.sourceContainer, this.sourcePool, this.logger);
+            this.musicPool = new(this.masterSettings, assetManager, this.sourceContainer, this.sourcePool, this.logger);
 
             this.logger.Debug("Constructed");
         }
 
         #endregion
 
-        #region Settings
-
-        AudioSettings IAudioManagerSettings.MasterSettings => this.masterSettings;
-        AudioSettings IAudioManagerSettings.SoundSettings  => this.soundPool.Settings;
-        AudioSettings IAudioManagerSettings.MusicSettings  => this.musicPool.Settings;
-
-        #endregion
+        IAudioSettings IAudioManager.MasterSettings => this.masterSettings;
 
         #region Sound
 
@@ -55,6 +49,8 @@ namespace UniT.Audio
         float IAudioManager.EffectiveSoundVolume => this.soundPool.EffectiveVolume;
 
         bool IAudioManager.EffectiveMuteSound => this.soundPool.EffectiveMute;
+
+        IAudioSettings IAudioManager.SoundSettings => this.soundPool.Settings;
 
         void IAudioManager.RegisterSoundSource(AudioSource source) => this.soundPool.Register(source);
 
@@ -121,6 +117,8 @@ namespace UniT.Audio
         float IAudioManager.EffectiveMusicVolume => this.musicPool.EffectiveVolume;
 
         bool IAudioManager.EffectiveMuteMusic => this.musicPool.EffectiveMute;
+
+        IAudioSettings IAudioManager.MusicSettings => this.musicPool.Settings;
 
         void IAudioManager.LoadMusic(AudioClip clip) => this.musicPool.Load(clip);
 
